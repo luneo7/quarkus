@@ -50,6 +50,7 @@ import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import io.quarkus.deployment.logging.LogCleanupFilterBuildItem;
 import io.quarkus.gizmo.Gizmo;
 import io.quarkus.netty.deployment.EventLoopSupplierBuildItem;
+import io.quarkus.vertx.core.runtime.VertxContextProvider;
 import io.quarkus.vertx.core.runtime.VertxCoreRecorder;
 import io.quarkus.vertx.core.runtime.VertxLocalsHelper;
 import io.quarkus.vertx.core.runtime.VertxLogDelegateFactory;
@@ -73,6 +74,9 @@ class VertxCoreProcessor {
             BuildProducer<NativeImageResourceBuildItem> nativeImageResources) {
         reflectiveClass.produce(new ReflectiveClassBuildItem(true, false, VertxLogDelegateFactory.class.getName()));
         reflectiveClass.produce(new ReflectiveClassBuildItem(true, true, LateBoundMDCProvider.class.getName()));
+        reflectiveClass.produce(new ReflectiveClassBuildItem(true, true, VertxContextProvider.class.getName()));
+        nativeImageResources.produce(new NativeImageResourceBuildItem(
+                "META-INF/services/org.eclipse.microprofile.context.spi.ThreadContextProvider"));
         nativeImageResources.produce(new NativeImageResourceBuildItem("META-INF/services/org.jboss.logmanager.MDCProvider"));
         return NativeImageConfigBuildItem.builder()
                 .addRuntimeInitializedClass("io.vertx.core.buffer.impl.VertxByteBufAllocator")
