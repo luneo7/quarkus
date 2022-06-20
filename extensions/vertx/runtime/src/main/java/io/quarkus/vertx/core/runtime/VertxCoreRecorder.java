@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -27,7 +28,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.jboss.logging.Logger;
-import org.jboss.threads.ContextHandler;
 import org.wildfly.common.cpu.ProcessorInfo;
 
 import io.netty.channel.EventLoopGroup;
@@ -37,6 +37,7 @@ import io.quarkus.runtime.IOThreadDetector;
 import io.quarkus.runtime.LaunchMode;
 import io.quarkus.runtime.ShutdownContext;
 import io.quarkus.runtime.annotations.Recorder;
+import io.quarkus.runtime.configuration.QuarkusContextHandler;
 import io.quarkus.vertx.core.runtime.config.AddressResolverConfiguration;
 import io.quarkus.vertx.core.runtime.config.ClusterConfiguration;
 import io.quarkus.vertx.core.runtime.config.EventBusConfiguration;
@@ -537,8 +538,8 @@ public class VertxCoreRecorder {
         thread.setContextClassLoader(cl);
     }
 
-    public ContextHandler<Object> executionContextHandler() {
-        return new ContextHandler<Object>() {
+    public QuarkusContextHandler<Object> executionContextHandler() {
+        return new QuarkusContextHandler<Object>() {
             @Override
             public Object captureContext() {
                 return Vertx.currentContext();
@@ -546,17 +547,35 @@ public class VertxCoreRecorder {
 
             @Override
             public void runWith(Runnable task, Object context) {
-                if (context != null) {
+                ContextInternal currentContext = (ContextInternal) Vertx.currentContext();
+                if (context != null && !context.equals(currentContext)) {
                     // Only do context handling if it's non null
                     final ContextInternal vertxContext = (ContextInternal) context;
                     vertxContext.beginDispatch();
                     try {
                         task.run();
                     } finally {
-                        vertxContext.endDispatch(null);
+                        vertxContext.endDispatch(currentContext);
                     }
                 } else {
                     task.run();
+                }
+            }
+
+            @Override
+            public <V> V callWith(Callable<V> task, Object context) throws Exception {
+                ContextInternal currentContext = (ContextInternal) Vertx.currentContext();
+                if (context != null && !context.equals(currentContext)) {
+                    // Only do context handling if it's non null
+                    final ContextInternal vertxContext = (ContextInternal) context;
+                    vertxContext.beginDispatch();
+                    try {
+                        return task.call();
+                    } finally {
+                        vertxContext.endDispatch(currentContext);
+                    }
+                } else {
+                    return task.call();
                 }
             }
         };

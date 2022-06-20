@@ -1,17 +1,16 @@
 package io.quarkus.deployment.builditem;
 
-import org.jboss.threads.ContextHandler;
-
 import io.quarkus.builder.item.SimpleBuildItem;
+import io.quarkus.runtime.configuration.QuarkusContextHandler;
 
 public final class ContextHandlerBuildItem extends SimpleBuildItem {
-    private final ContextHandler<Object> contextHandler;
+    private final QuarkusContextHandler<Object> contextHandler;
 
-    public ContextHandlerBuildItem(ContextHandler<Object> contextHandler) {
+    public ContextHandlerBuildItem(QuarkusContextHandler<Object> contextHandler) {
         this.contextHandler = contextHandler;
     }
 
-    public ContextHandler<Object> contextHandler() {
+    public QuarkusContextHandler<Object> contextHandler() {
         return contextHandler;
     }
 }
