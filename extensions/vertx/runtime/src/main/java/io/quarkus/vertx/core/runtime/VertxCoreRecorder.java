@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -546,14 +547,15 @@ public class VertxCoreRecorder {
 
             @Override
             public void runWith(Runnable task, Object context) {
-                if (context != null) {
+                ContextInternal currentContext = (ContextInternal) Vertx.currentContext();
+                if (context != null && !context.equals(currentContext)) {
                     // Only do context handling if it's non null
                     final ContextInternal vertxContext = (ContextInternal) context;
                     vertxContext.beginDispatch();
                     try {
                         task.run();
                     } finally {
-                        vertxContext.endDispatch(null);
+                        vertxContext.endDispatch(currentContext);
                     }
                 } else {
                     task.run();

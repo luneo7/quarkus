@@ -1,23 +1,32 @@
 package io.quarkus.mutiny.runtime;
 
+import java.util.concurrent.Callable;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RunnableScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 import org.jboss.logging.Logger;
+import org.jboss.threads.ContextHandler;
 
 import io.quarkus.runtime.ShutdownContext;
 import io.quarkus.runtime.annotations.Recorder;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.infrastructure.MutinyScheduler;
 
 @Recorder
 public class MutinyInfrastructure {
 
     public static final String VERTX_EVENT_LOOP_THREAD_PREFIX = "vert.x-eventloop-thread-";
 
-    public void configureMutinyInfrastructure(ExecutorService exec, ShutdownContext shutdownContext) {
+    public void configureMutinyInfrastructure(ExecutorService exec, ContextHandler<Object> contextHandler,
+            ShutdownContext shutdownContext) {
         //mutiny leaks a ScheduledExecutorService if you don't do this
         Infrastructure.getDefaultWorkerPool().shutdown();
         Infrastructure.setDefaultExecutor(new Executor() {
@@ -31,6 +40,20 @@ public class MutinyInfrastructure {
                     }
                     // Ignore the failure - the application has been shutdown.
                 }
+            }
+        }, new MutinyScheduler(exec) {
+            @Override
+            protected <V> RunnableScheduledFuture<V> decorateTask(Runnable runnable, RunnableScheduledFuture<V> task) {
+                return super.decorateTask(runnable, new ContextualRunnableScheduledFuture<>(contextHandler,
+                        contextHandler.captureContext(),
+                        task));
+            }
+
+            @Override
+            protected <V> RunnableScheduledFuture<V> decorateTask(Callable<V> callable, RunnableScheduledFuture<V> task) {
+                return super.decorateTask(callable, new ContextualRunnableScheduledFuture<>(contextHandler,
+                        contextHandler.captureContext(),
+                        task));
             }
         });
         shutdownContext.addLastShutdownTask(new Runnable() {
@@ -84,5 +107,63 @@ public class MutinyInfrastructure {
                 logger.info(log);
             }
         });
+    }
+
+    public static class ContextualRunnableScheduledFuture<V> implements RunnableScheduledFuture<V> {
+        private final RunnableScheduledFuture<V> runnable;
+        private final Object context;
+        private final ContextHandler<Object> contextHandler;
+
+        public ContextualRunnableScheduledFuture(ContextHandler<Object> contextHandler, Object context,
+                RunnableScheduledFuture<V> runnable) {
+            this.contextHandler = contextHandler;
+            this.context = context;
+            this.runnable = runnable;
+        }
+
+        @Override
+        public boolean isPeriodic() {
+            return runnable.isPeriodic();
+        }
+
+        @Override
+        public long getDelay(TimeUnit unit) {
+            return runnable.getDelay(unit);
+        }
+
+        @Override
+        public int compareTo(Delayed o) {
+            return runnable.compareTo(o);
+        }
+
+        @Override
+        public void run() {
+            contextHandler.runWith(runnable, context);
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return runnable.cancel(mayInterruptIfRunning);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return runnable.isCancelled();
+        }
+
+        @Override
+        public boolean isDone() {
+            return runnable.isDone();
+        }
+
+        @Override
+        public V get() throws InterruptedException, ExecutionException {
+            return runnable.get();
+        }
+
+        @Override
+        public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+            return runnable.get(timeout, unit);
+        }
     }
 }
