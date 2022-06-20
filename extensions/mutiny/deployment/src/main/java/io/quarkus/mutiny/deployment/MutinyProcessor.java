@@ -1,6 +1,7 @@
 package io.quarkus.mutiny.deployment;
 
 import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
 import org.jboss.threads.ContextHandler;
@@ -26,9 +27,9 @@ public class MutinyProcessor {
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
     public void runtimeInit(ExecutorBuildItem executorBuildItem, MutinyInfrastructure recorder,
-            ContextHandlerBuildItem contextHandlerBuildItem, ShutdownContextBuildItem shutdownContext) {
+                            Optional<ContextHandlerBuildItem> contextHandlerBuildItem, ShutdownContextBuildItem shutdownContext) {
         ExecutorService executor = executorBuildItem.getExecutorProxy();
-        ContextHandler<Object> contextHandler = contextHandlerBuildItem.contextHandler();
+        ContextHandler<Object> contextHandler = contextHandlerBuildItem.map(ContextHandlerBuildItem::contextHandler).orElse(null);
         recorder.configureMutinyInfrastructure(executor, contextHandler, shutdownContext);
     }
 

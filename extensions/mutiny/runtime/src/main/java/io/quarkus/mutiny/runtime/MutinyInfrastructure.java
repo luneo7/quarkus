@@ -1,5 +1,6 @@
 package io.quarkus.mutiny.runtime;
 
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
@@ -29,6 +30,23 @@ public class MutinyInfrastructure {
             ShutdownContext shutdownContext) {
         //mutiny leaks a ScheduledExecutorService if you don't do this
         Infrastructure.getDefaultWorkerPool().shutdown();
+
+        MutinyScheduler mutinyScheduler = contextHandler != null ? new MutinyScheduler(exec) {
+            @Override
+            protected <V> RunnableScheduledFuture<V> decorateTask(Runnable runnable, RunnableScheduledFuture<V> task) {
+                return super.decorateTask(runnable, new ContextualRunnableScheduledFuture<>(contextHandler,
+                                                                                            contextHandler.captureContext(),
+                                                                                            task));
+            }
+
+            @Override
+            protected <V> RunnableScheduledFuture<V> decorateTask(Callable<V> callable, RunnableScheduledFuture<V> task) {
+                return super.decorateTask(callable, new ContextualRunnableScheduledFuture<>(contextHandler,
+                                                                                            contextHandler.captureContext(),
+                                                                                            task));
+            }
+        } : new MutinyScheduler(exec);
+
         Infrastructure.setDefaultExecutor(new Executor() {
             @Override
             public void execute(Runnable command) {
@@ -41,21 +59,8 @@ public class MutinyInfrastructure {
                     // Ignore the failure - the application has been shutdown.
                 }
             }
-        }, new MutinyScheduler(exec) {
-            @Override
-            protected <V> RunnableScheduledFuture<V> decorateTask(Runnable runnable, RunnableScheduledFuture<V> task) {
-                return super.decorateTask(runnable, new ContextualRunnableScheduledFuture<>(contextHandler,
-                        contextHandler.captureContext(),
-                        task));
-            }
+        }, mutinyScheduler);
 
-            @Override
-            protected <V> RunnableScheduledFuture<V> decorateTask(Callable<V> callable, RunnableScheduledFuture<V> task) {
-                return super.decorateTask(callable, new ContextualRunnableScheduledFuture<>(contextHandler,
-                        contextHandler.captureContext(),
-                        task));
-            }
-        });
         shutdownContext.addLastShutdownTask(new Runnable() {
             @Override
             public void run() {
